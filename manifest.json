@@ -1,6 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Template Inserter",
+  "author": "doankhanh.dev",
   "version": "1.0",
   "permissions": [
     "contextMenus",
