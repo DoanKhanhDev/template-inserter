@@ -187,19 +187,31 @@ function createTemplateItem(template) {
 }
 
 /**
- * Merges default templates with user templates.
+ * Merges default templates with user templates (with deduplication).
  * @param {Array} userTemplates - User-created templates
  * @param {Array} defaultTemplates - Default templates
- * @returns {Array} Merged templates with defaults first
+ * @returns {Array} Merged templates with defaults first, deduplicated
  */
 function mergeTemplates(userTemplates, defaultTemplates) {
-  const merged = [...defaultTemplates];
-  const defaultIds = new Set(defaultTemplates.map(t => t.id));
-  userTemplates.forEach(template => {
-    if (!defaultIds.has(template.id)) {
-      merged.push(template);
+  // Deduplicate default templates first (in case there are duplicates in JSON)
+  const defaultMap = new Map();
+  defaultTemplates.forEach(t => {
+    if (t.id && !defaultMap.has(t.id)) {
+      defaultMap.set(t.id, t);
     }
   });
+
+  const merged = Array.from(defaultMap.values());
+  const seenIds = new Set(defaultMap.keys());
+
+  // Add user templates that are not in defaults
+  userTemplates.forEach(template => {
+    if (template.id && !seenIds.has(template.id)) {
+      merged.push(template);
+      seenIds.add(template.id);
+    }
+  });
+
   return merged;
 }
 
@@ -214,7 +226,6 @@ async function refresh() {
   defaultTemplateIds = defaultTemplates.map(t => t.id);
 
   const allTemplates = mergeTemplates(userTemplates, defaultTemplates);
-  console.log("Loaded templates:", allTemplates);
 
   elements.list.innerHTML = "";
   allTemplates.forEach(template => {
@@ -288,6 +299,13 @@ function showAlert(message, isError = false) {
 elements.newBtn.onclick = clearForm;
 elements.saveBtn.onclick = handleSave;
 elements.optionsBtn.onclick = () => { chrome.runtime.openOptionsPage(); };
+
+// Listen for template reload messages from options or background
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.action === ACTION_RELOAD) {
+    refresh();
+  }
+});
 
 // Initialize the UI
 refresh();

@@ -90,8 +90,30 @@ function isTextInput(element) {
 }
 
 // Listen for template insertion messages from the popup
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.action === "insertTemplate") {
-    insertTemplate(msg.text);
-  }
-});
+// Ensure we only register one message listener even if the script is injected multiple times
+if (!window.__template_insert_listener_installed) {
+  window.__template_insert_listener_installed = true;
+
+  // Keep track of last insertion to avoid duplicate rapid insertions
+  window.__last_template_insert = { text: null, time: 0 };
+
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg && msg.action === "insertTemplate") {
+      try {
+        const now = Date.now();
+        const text = msg.text || '';
+
+        // If same text inserted within 500ms, ignore as duplicate
+        if (window.__last_template_insert.text === text && (now - window.__last_template_insert.time) < 500) {
+          console.debug('Duplicate insertTemplate message ignored');
+          return;
+        }
+
+        window.__last_template_insert = { text, time: now };
+        insertTemplate(text);
+      } catch (e) {
+        console.error('Error handling insertTemplate message', e);
+      }
+    }
+  });
+}

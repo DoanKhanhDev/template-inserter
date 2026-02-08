@@ -36,18 +36,28 @@ async function loadDefaultTemplates() {
 }
 
 /**
- * Merges default templates with custom templates.
+ * Merges default templates with custom templates (with deduplication).
  * @param {Array} customTemplates - Custom templates from storage
  * @param {Array} defaultTemplates - Default templates from JSON
- * @returns {Array} Merged templates with defaults first
+ * @returns {Array} Merged templates with defaults first, deduplicated
  */
 function mergeTemplates(customTemplates, defaultTemplates) {
-  const merged = [...defaultTemplates];
-  const defaultIds = new Set(defaultTemplates.map(t => t.id));
+  // Deduplicate default templates first (in case there are duplicates in JSON)
+  const defaultMap = new Map();
+  defaultTemplates.forEach(t => {
+    if (t.id && !defaultMap.has(t.id)) {
+      defaultMap.set(t.id, t);
+    }
+  });
 
+  const merged = Array.from(defaultMap.values());
+  const seenIds = new Set(defaultMap.keys());
+
+  // Add custom templates that are not in defaults
   customTemplates.forEach(template => {
-    if (!defaultIds.has(template.id)) {
+    if (template.id && !seenIds.has(template.id)) {
       merged.push(template);
+      seenIds.add(template.id);
     }
   });
 
@@ -98,7 +108,6 @@ async function loadTemplates() {
 
     // Dynamically extract default template IDs from loaded templates
     defaultTemplateIds = defaultTemplates.map(t => t.id);
-
     const allTemplates = mergeTemplates(customTemplates, defaultTemplates);
 
     cachedTemplates = allTemplates;
