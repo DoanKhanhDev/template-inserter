@@ -21,5 +21,15 @@
       "matches": ["<all_urls>"],
       "js": ["content.js"]
     }
+  ],
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["templates.json"],
+      "matches": []
+    }
   ]
 }

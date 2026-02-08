@@ -1,0 +1,23 @@
+<!-- options/options.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Extension Settings</title>
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="options.css">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+<body class="options-page">
+    <div class="options-card">
+      <h1>Settings</h1>
+      <label for="template-json-url">Template JSON URL</label>
+      <input type="text" id="template-json-url" placeholder="http://127.0.0.1:5500/templates.json" />
+      <div class="controls">
+        <button id="save">Save</button>
+        <div id="status"></div>
+      </div>
+    </div>
+    <script src="options.js"></script>
+</body>
+</html>

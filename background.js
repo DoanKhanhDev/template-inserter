@@ -7,6 +7,53 @@ const CONTENT_SCRIPT = "content.js";
 const ACTION_INSERT = "insertTemplate";
 const ACTION_RELOAD = "reloadMenus";
 
+let cachedTemplates = [];
+let defaultTemplateIds = [];
+
+/**
+ * Loads default templates from HTTP server.
+ * @returns {Promise<Array>} Array of default template objects
+ */
+async function loadDefaultTemplates() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(['template_json_url'], async (result) => {
+      const url = result.template_json_url || '';
+      if (!url) {
+        resolve([]);
+        return;
+      }
+
+      try {
+        const response = await fetch(url);
+        const templates = await response.json();
+        resolve(templates);
+      } catch (error) {
+        console.error('Failed to load default templates:', error);
+        resolve([]);
+      }
+    });
+  });
+}
+
+/**
+ * Merges default templates with custom templates.
+ * @param {Array} customTemplates - Custom templates from storage
+ * @param {Array} defaultTemplates - Default templates from JSON
+ * @returns {Array} Merged templates with defaults first
+ */
+function mergeTemplates(customTemplates, defaultTemplates) {
+  const merged = [...defaultTemplates];
+  const defaultIds = new Set(defaultTemplates.map(t => t.id));
+
+  customTemplates.forEach(template => {
+    if (!defaultIds.has(template.id)) {
+      merged.push(template);
+    }
+  });
+
+  return merged;
+}
+
 /**
  * Builds the context menu with template entries.
  * @param {Array} templates - Array of template objects with name and content
@@ -28,10 +75,14 @@ function buildMenu(templates) {
       return;
     }
 
+    const label = defaultTemplateIds.includes(template.id)
+      ? `${template.name} (default)`
+      : template.name;
+
     chrome.contextMenus.create({
       id: `${MENU_ITEM_PREFIX}${index}`,
       parentId: MENU_ROOT_ID,
-      title: template.name,
+      title: label,
       contexts: [EDITABLE_CONTEXT]
     });
   });
@@ -40,10 +91,18 @@ function buildMenu(templates) {
 /**
  * Retrieves templates from storage and rebuilds the context menu.
  */
-function loadTemplates() {
-  chrome.storage.sync.get([STORAGE_KEY], (result) => {
-    const templates = result[STORAGE_KEY] || [];
-    buildMenu(templates);
+async function loadTemplates() {
+  chrome.storage.sync.get([STORAGE_KEY], async (result) => {
+    const customTemplates = result[STORAGE_KEY] || [];
+    const defaultTemplates = await loadDefaultTemplates();
+
+    // Dynamically extract default template IDs from loaded templates
+    defaultTemplateIds = defaultTemplates.map(t => t.id);
+
+    const allTemplates = mergeTemplates(customTemplates, defaultTemplates);
+
+    cachedTemplates = allTemplates;
+    buildMenu(allTemplates);
   });
 }
 
@@ -64,15 +123,24 @@ async function injectContentScript(tabId) {
 }
 
 /**
- * Retrieves a template by index from storage.
+ * Retrieves a template by index from merged templates.
  * @param {number} index - The template index
  * @returns {Promise<Object|null>} The template object or null if not found
  */
 function getTemplateByIndex(index) {
   return new Promise((resolve) => {
-    chrome.storage.sync.get([STORAGE_KEY], (result) => {
-      const templates = result[STORAGE_KEY] || [];
-      const template = templates[index];
+    if (cachedTemplates && cachedTemplates[index]) {
+      resolve(cachedTemplates[index]);
+      return;
+    }
+
+    chrome.storage.sync.get([STORAGE_KEY], async (result) => {
+      const customTemplates = result[STORAGE_KEY] || [];
+      const defaultTemplates = await loadDefaultTemplates();
+      const allTemplates = mergeTemplates(customTemplates, defaultTemplates);
+
+      cachedTemplates = allTemplates;
+      const template = allTemplates[index];
 
       if (!template) {
         console.error(`Template at index ${index} not found`);

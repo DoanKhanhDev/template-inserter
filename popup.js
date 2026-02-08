@@ -10,10 +10,37 @@ const elements = {
   contentInput: document.getElementById("content"),
   saveBtn: document.getElementById("save"),
   newBtn: document.getElementById("new"),
+  optionsBtn: document.getElementById("options"),
   alertBox: document.querySelector(".alert")
 };
 
 let editingIndex = null;
+let defaultTemplateIds = [];
+
+/**
+ * Loads default templates from HTTP server.
+ * @returns {Promise<Array>} Array of default template objects
+ */
+async function loadDefaultTemplates() {
+  return new Promise((resolve) => {
+    chrome.storage.sync.get(['template_json_url'], async (result) => {
+      const url = result.template_json_url || '';
+      if (!url) {
+        resolve([]); // don't fetch when URL is empty
+        return;
+      }
+
+      try {
+        const response = await fetch(url);
+        const templates = await response.json();
+        resolve(templates);
+      } catch (error) {
+        console.error('Failed to load default templates:', error);
+        resolve([]);
+      }
+    });
+  });
+}
 
 /**
  * Retrieves templates from storage.
@@ -84,12 +111,20 @@ function createEditButton(template) {
   const btn = document.createElement("button");
   btn.className = "edit-btn";
   btn.textContent = "Edit";
-  btn.onclick = () => {
-    const index = Array.from(elements.list.children).findIndex(
-      li => li.querySelector(".template-name").textContent.trim() === template.name
-    );
-    loadTemplateForEditing(template, index);
-  };
+
+  if (defaultTemplateIds.includes(template.id)) {
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
+    btn.style.cursor = "not-allowed";
+    btn.title = "Default templates cannot be edited";
+  } else {
+    btn.onclick = () => {
+      const index = Array.from(elements.list.children).findIndex(
+        li => li.querySelector(".template-name").textContent.trim() === template.name
+      );
+      loadTemplateForEditing(template, index);
+    };
+  }
   return btn;
 }
 
@@ -102,15 +137,23 @@ function createRemoveButton(template) {
   const btn = document.createElement("button");
   btn.className = "remove-btn";
   btn.textContent = "Remove";
-  btn.onclick = async () => {
-    const templates = await getTemplates();
-    const index = templates.findIndex(t => t.id === template.id);
-    if (index !== -1) {
-      templates.splice(index, 1);
-      await saveTemplates(templates);
-      refresh();
-    }
-  };
+
+  if (defaultTemplateIds.includes(template.id)) {
+    btn.disabled = true;
+    btn.style.opacity = "0.5";
+    btn.style.cursor = "not-allowed";
+    btn.title = "Default templates cannot be removed";
+  } else {
+    btn.onclick = async () => {
+      const templates = await getTemplates();
+      const index = templates.findIndex(t => t.id === template.id);
+      if (index !== -1) {
+        templates.splice(index, 1);
+        await saveTemplates(templates);
+        refresh();
+      }
+    };
+  }
   return btn;
 }
 
@@ -123,9 +166,14 @@ function createTemplateItem(template) {
   const li = document.createElement("li");
   li.className = "template-item";
 
+  if (defaultTemplateIds.includes(template.id)) {
+    li.style.opacity = "0.7";
+  }
+
   const nameSpan = document.createElement("span");
   nameSpan.className = "template-name";
-  nameSpan.textContent = `${template.name} `;
+  const defaultLabel = defaultTemplateIds.includes(template.id) ? " (default)" : "";
+  nameSpan.textContent = `${template.name}${defaultLabel} `;
 
   const actionsDiv = document.createElement("div");
   actionsDiv.className = "template-actions";
@@ -139,14 +187,37 @@ function createTemplateItem(template) {
 }
 
 /**
+ * Merges default templates with user templates.
+ * @param {Array} userTemplates - User-created templates
+ * @param {Array} defaultTemplates - Default templates
+ * @returns {Array} Merged templates with defaults first
+ */
+function mergeTemplates(userTemplates, defaultTemplates) {
+  const merged = [...defaultTemplates];
+  const defaultIds = new Set(defaultTemplates.map(t => t.id));
+  userTemplates.forEach(template => {
+    if (!defaultIds.has(template.id)) {
+      merged.push(template);
+    }
+  });
+  return merged;
+}
+
+/**
  * Refreshes the template list display.
  */
 async function refresh() {
-  const templates = await getTemplates();
-  console.log("Loaded templates:", templates);
+  const userTemplates = await getTemplates();
+  const defaultTemplates = await loadDefaultTemplates();
+
+  // Dynamically extract default template IDs from loaded templates
+  defaultTemplateIds = defaultTemplates.map(t => t.id);
+
+  const allTemplates = mergeTemplates(userTemplates, defaultTemplates);
+  console.log("Loaded templates:", allTemplates);
 
   elements.list.innerHTML = "";
-  templates.forEach(template => {
+  allTemplates.forEach(template => {
     elements.list.appendChild(createTemplateItem(template));
   });
 }
@@ -216,6 +287,7 @@ function showAlert(message, isError = false) {
 // Event listeners
 elements.newBtn.onclick = clearForm;
 elements.saveBtn.onclick = handleSave;
+elements.optionsBtn.onclick = () => { chrome.runtime.openOptionsPage(); };
 
 // Initialize the UI
 refresh();
