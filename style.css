@@ -36,7 +36,11 @@ button.remove-btn:hover {
 ul {
   list-style-type: none;
   padding: 0;
+  max-height: 315px;
+  overflow-y: auto;
+  scrollbar-color: #a0a8af transparent;
 }
+
 li {
   padding: 5px 0;
   border-bottom: 1px solid #ddd;
